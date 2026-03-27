@@ -1,6 +1,8 @@
-# SKY130 Standard Cell Characterization (ngspice batch)
+# Standard-Cell-Library-Design-and-Characterization
 
-This repository contains an automation scaffold for Project 1 NLDM characterization.
+SKY130 standard cell library design and **ngspice** batch characterization (course project).
+
+This repository contains the cell library netlists and an automation scaffold for NLDM characterization.
 
 ## What this gives you
 
@@ -90,4 +92,3 @@ Each file in `results/nldm/<cell>.json` contains:
 - `load_cap_pf` vector
 - 4 matrices (`7x7`) for NLDM values in ns
 - run metadata
-
