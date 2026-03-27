@@ -1,0 +1,16 @@
+* ============================================================================
+* SKY130 standard cell library placeholder
+* Replace this file content with your final 13 subcircuits:
+*   invx1 invx2 invx4 invx8
+*   nand2x1 nand2x2 nand2x4
+*   nor2x1 nor2x2 nor2x4
+*   maj3x1 maj3x2 maj3x4
+* ============================================================================
+
+* Example placeholder inverter to let automation dry-run with valid syntax.
+* Remove or replace with real SKY130 transistor-level definitions.
+.subckt invx1 A Y VDD VSS
+* NOTE: behavioral placeholder only for syntax flow checks.
+* Real characterization should use MOS transistor implementation.
+EINV Y VSS VOL='VDD-V(A)'
+.ends invx1
