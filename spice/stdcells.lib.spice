@@ -1,16 +1,138 @@
 * ============================================================================
-* SKY130 standard cell library placeholder
-* Replace this file content with your final 13 subcircuits:
+* SKY130 standard cell library - 13 subcircuits:
 *   invx1 invx2 invx4 invx8
 *   nand2x1 nand2x2 nand2x4
 *   nor2x1 nor2x2 nor2x4
 *   maj3x1 maj3x2 maj3x4
 * ============================================================================
 
-* Example placeholder inverter to let automation dry-run with valid syntax.
-* Remove or replace with real SKY130 transistor-level definitions.
+* invx1
 .subckt invx1 A Y VDD VSS
-* NOTE: behavioral placeholder only for syntax flow checks.
-* Real characterization should use MOS transistor implementation.
-EINV Y VSS VOL='VDD-V(A)'
+MP0 Y A VDD VDD sky130_fd_pr__pfet_01v8 W=1.00e-6 L=0.15e-6
+MN0 Y A VSS VSS sky130_fd_pr__nfet_01v8 W=0.42e-6 L=0.15e-6
 .ends invx1
+
+* invx2
+.subckt invx2 A Y VDD VSS
+MP0 Y A VDD VDD sky130_fd_pr__pfet_01v8 W=2.00e-6 L=0.15e-6
+MN0 Y A VSS VSS sky130_fd_pr__nfet_01v8 W=0.84e-6 L=0.15e-6
+.ends invx2
+
+* invx4
+.subckt invx4 A Y VDD VSS
+MP0 Y A VDD VDD sky130_fd_pr__pfet_01v8 W=4.00e-6 L=0.15e-6
+MN0 Y A VSS VSS sky130_fd_pr__nfet_01v8 W=1.68e-6 L=0.15e-6
+.ends invx4
+
+* invx8
+.subckt invx8 A Y VDD VSS
+MP0 Y A VDD VDD sky130_fd_pr__pfet_01v8 W=8.00e-6 L=0.15e-6
+MN0 Y A VSS VSS sky130_fd_pr__nfet_01v8 W=3.36e-6 L=0.15e-6
+.ends invx8
+
+* nand2x1
+.subckt nand2x1 A B Y VDD VSS
+MP0 Y A VDD VDD sky130_fd_pr__pfet_01v8 W=1.00e-6 L=0.15e-6
+MP1 Y B VDD VDD sky130_fd_pr__pfet_01v8 W=1.00e-6 L=0.15e-6
+MN0 Y   A mid VSS sky130_fd_pr__nfet_01v8 W=0.84e-6 L=0.15e-6
+MN1 mid B VSS VSS sky130_fd_pr__nfet_01v8 W=0.84e-6 L=0.15e-6
+.ends nand2x1
+
+* nand2x2
+.subckt nand2x2 A B Y VDD VSS
+MP0 Y A VDD VDD sky130_fd_pr__pfet_01v8 W=2.00e-6 L=0.15e-6
+MP1 Y B VDD VDD sky130_fd_pr__pfet_01v8 W=2.00e-6 L=0.15e-6
+MN0 Y   A mid VSS sky130_fd_pr__nfet_01v8 W=1.68e-6 L=0.15e-6
+MN1 mid B VSS VSS sky130_fd_pr__nfet_01v8 W=1.68e-6 L=0.15e-6
+.ends nand2x2
+
+* nand2x4
+.subckt nand2x4 A B Y VDD VSS
+MP0 Y A VDD VDD sky130_fd_pr__pfet_01v8 W=4.00e-6 L=0.15e-6
+MP1 Y B VDD VDD sky130_fd_pr__pfet_01v8 W=4.00e-6 L=0.15e-6
+MN0 Y   A mid VSS sky130_fd_pr__nfet_01v8 W=3.36e-6 L=0.15e-6
+MN1 mid B VSS VSS sky130_fd_pr__nfet_01v8 W=3.36e-6 L=0.15e-6
+.ends nand2x4
+
+* nor2x1
+.subckt nor2x1 A B Y VDD VSS
+MP0 mid A VDD VDD sky130_fd_pr__pfet_01v8 W=2.00e-6 L=0.15e-6
+MP1 Y   B mid VDD sky130_fd_pr__pfet_01v8 W=2.00e-6 L=0.15e-6
+MN0 Y A VSS VSS sky130_fd_pr__nfet_01v8 W=0.42e-6 L=0.15e-6
+MN1 Y B VSS VSS sky130_fd_pr__nfet_01v8 W=0.42e-6 L=0.15e-6
+.ends nor2x1
+
+* nor2x2
+.subckt nor2x2 A B Y VDD VSS
+MP0 mid A VDD VDD sky130_fd_pr__pfet_01v8 W=4.00e-6 L=0.15e-6
+MP1 Y   B mid VDD sky130_fd_pr__pfet_01v8 W=4.00e-6 L=0.15e-6
+MN0 Y A VSS VSS sky130_fd_pr__nfet_01v8 W=0.84e-6 L=0.15e-6
+MN1 Y B VSS VSS sky130_fd_pr__nfet_01v8 W=0.84e-6 L=0.15e-6
+.ends nor2x2
+
+* nor2x4
+.subckt nor2x4 A B Y VDD VSS
+MP0 mid A VDD VDD sky130_fd_pr__pfet_01v8 W=8.00e-6 L=0.15e-6
+MP1 Y   B mid VDD sky130_fd_pr__pfet_01v8 W=8.00e-6 L=0.15e-6
+MN0 Y A VSS VSS sky130_fd_pr__nfet_01v8 W=1.68e-6 L=0.15e-6
+MN1 Y B VSS VSS sky130_fd_pr__nfet_01v8 W=1.68e-6 L=0.15e-6
+.ends nor2x4
+
+* maj3x1
+* PUN: (A+B).(B+C).(A+C) - worst case 3 PMOS in series -> W=3.00u
+* PDN: AB+BC+AC          - worst case 2 NMOS in series -> W=0.84u
+.subckt maj3x1 A B C Y VDD VSS
+* PUN
+MP0 mid0 A VDD  VDD sky130_fd_pr__pfet_01v8 W=3.00e-6 L=0.15e-6
+MP1 mid0 B VDD  VDD sky130_fd_pr__pfet_01v8 W=3.00e-6 L=0.15e-6
+MP2 mid1 B mid0 VDD sky130_fd_pr__pfet_01v8 W=3.00e-6 L=0.15e-6
+MP3 mid1 C mid0 VDD sky130_fd_pr__pfet_01v8 W=3.00e-6 L=0.15e-6
+MP4 Y    A mid1 VDD sky130_fd_pr__pfet_01v8 W=3.00e-6 L=0.15e-6
+MP5 Y    C mid1 VDD sky130_fd_pr__pfet_01v8 W=3.00e-6 L=0.15e-6
+* PDN
+MN0 Y    A mid0 VSS sky130_fd_pr__nfet_01v8 W=0.84e-6 L=0.15e-6
+MN1 mid0 B VSS  VSS sky130_fd_pr__nfet_01v8 W=0.84e-6 L=0.15e-6
+MN2 Y    B mid1 VSS sky130_fd_pr__nfet_01v8 W=0.84e-6 L=0.15e-6
+MN3 mid1 C VSS  VSS sky130_fd_pr__nfet_01v8 W=0.84e-6 L=0.15e-6
+MN4 Y    A mid2 VSS sky130_fd_pr__nfet_01v8 W=0.84e-6 L=0.15e-6
+MN5 mid2 C VSS  VSS sky130_fd_pr__nfet_01v8 W=0.84e-6 L=0.15e-6
+.ends maj3x1
+
+* maj3x2
+* PUN: W=6.00u  PDN: W=1.68u
+.subckt maj3x2 A B C Y VDD VSS
+* PUN
+MP0 mid0 A VDD  VDD sky130_fd_pr__pfet_01v8 W=6.00e-6 L=0.15e-6
+MP1 mid0 B VDD  VDD sky130_fd_pr__pfet_01v8 W=6.00e-6 L=0.15e-6
+MP2 mid1 B mid0 VDD sky130_fd_pr__pfet_01v8 W=6.00e-6 L=0.15e-6
+MP3 mid1 C mid0 VDD sky130_fd_pr__pfet_01v8 W=6.00e-6 L=0.15e-6
+MP4 Y    A mid1 VDD sky130_fd_pr__pfet_01v8 W=6.00e-6 L=0.15e-6
+MP5 Y    C mid1 VDD sky130_fd_pr__pfet_01v8 W=6.00e-6 L=0.15e-6
+* PDN
+MN0 Y    A mid0 VSS sky130_fd_pr__nfet_01v8 W=1.68e-6 L=0.15e-6
+MN1 mid0 B VSS  VSS sky130_fd_pr__nfet_01v8 W=1.68e-6 L=0.15e-6
+MN2 Y    B mid1 VSS sky130_fd_pr__nfet_01v8 W=1.68e-6 L=0.15e-6
+MN3 mid1 C VSS  VSS sky130_fd_pr__nfet_01v8 W=1.68e-6 L=0.15e-6
+MN4 Y    A mid2 VSS sky130_fd_pr__nfet_01v8 W=1.68e-6 L=0.15e-6
+MN5 mid2 C VSS  VSS sky130_fd_pr__nfet_01v8 W=1.68e-6 L=0.15e-6
+.ends maj3x2
+
+* maj3x4
+* PUN: W=12.00u  PDN: W=3.36u
+.subckt maj3x4 A B C Y VDD VSS
+* PUN
+MP0 mid0 A VDD  VDD sky130_fd_pr__pfet_01v8 W=12.00e-6 L=0.15e-6
+MP1 mid0 B VDD  VDD sky130_fd_pr__pfet_01v8 W=12.00e-6 L=0.15e-6
+MP2 mid1 B mid0 VDD sky130_fd_pr__pfet_01v8 W=12.00e-6 L=0.15e-6
+MP3 mid1 C mid0 VDD sky130_fd_pr__pfet_01v8 W=12.00e-6 L=0.15e-6
+MP4 Y    A mid1 VDD sky130_fd_pr__pfet_01v8 W=12.00e-6 L=0.15e-6
+MP5 Y    C mid1 VDD sky130_fd_pr__pfet_01v8 W=12.00e-6 L=0.15e-6
+* PDN
+MN0 Y    A mid0 VSS sky130_fd_pr__nfet_01v8 W=3.36e-6 L=0.15e-6
+MN1 mid0 B VSS  VSS sky130_fd_pr__nfet_01v8 W=3.36e-6 L=0.15e-6
+MN2 Y    B mid1 VSS sky130_fd_pr__nfet_01v8 W=3.36e-6 L=0.15e-6
+MN3 mid1 C VSS  VSS sky130_fd_pr__nfet_01v8 W=3.36e-6 L=0.15e-6
+MN4 Y    A mid2 VSS sky130_fd_pr__nfet_01v8 W=3.36e-6 L=0.15e-6
+MN5 mid2 C VSS  VSS sky130_fd_pr__nfet_01v8 W=3.36e-6 L=0.15e-6
+.ends maj3x4
+
