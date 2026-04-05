@@ -430,14 +430,12 @@ def main() -> int:
 
         sky130_model = str(sky130_path)
         stdcell_lib = str(stdcell_path)
-        # Optional vendor spinit next to sky130.lib.spice (some volare/open_pdks layouts).
-        spinit_path = sky130_path.parent / "spinit"
-        spinit_line = (
-            f'.include "{spinit_path.resolve()}"\n' if spinit_path.is_file() else ""
-        )
+        # Do not .include the PDK "spinit" file into the netlist: it contains `set ngbehavior=...`
+        # lines that belong in .spiceinit / control context only; as included SPICE they parse as
+        # circuit line 3 and fail with "Unable to find definition of model" on `set ngbehavior=hsa`.
         # Only .lib ... tt — sky130.lib.spice already .include's corners/tt.spice inside the tt block.
         # A second .include of tt.spice duplicates models and breaks parameter expansion (l=$, w=$).
-        deck_preamble = spinit_line + f'.lib "{sky130_model}" tt\n.temp 25\n\n'
+        deck_preamble = f'.lib "{sky130_model}" tt\n.temp 25\n\n'
 
     if not shutil.which(args.ngspice_bin):
         raise SystemExit(f"ngspice executable not found: {args.ngspice_bin}")
