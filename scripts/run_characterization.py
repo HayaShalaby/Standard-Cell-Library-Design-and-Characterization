@@ -271,19 +271,33 @@ def main() -> int:
     if not shutil.which(args.ngspice_bin):
         raise SystemExit(f"ngspice executable not found: {args.ngspice_bin}")
 
-    # Run ngspice with cwd = repo directory that contains .spiceinit so SkyWater
-    # compatibility flags load in batch mode (not only from ~/.spiceinit).
+    # ngspice cwd: the directory that contains sky130.lib.spice (e.g. .../libs.tech/ngspice).
+    # SkyWater's .lib uses relative .include "corners/tt.spice"; those paths resolve against
+    # this directory. Using only the repo's spice/ngspice_char_cwd breaks model linking for
+    # some devices (can't find sky130_fd_pr__*__model). We still copy our .spiceinit there so
+    # batch mode loads ngbehavior/skywaterpdk/ng_nomodcheck.
     ngspice_char_cwd = root / "spice" / "ngspice_char_cwd"
+    spiceinit_src = ngspice_char_cwd / ".spiceinit"
     ngspice_cwd: Optional[Path] = None
     if not args.smoke_test and sky130_model:
         ensure_dirs(ngspice_char_cwd)
-        if not (ngspice_char_cwd / ".spiceinit").is_file():
+        if not spiceinit_src.is_file():
             raise SystemExit(
-                f"Missing {ngspice_char_cwd / '.spiceinit'} — restore it from the repository."
+                f"Missing {spiceinit_src} — restore it from the repository."
             )
-        ngspice_cwd = ngspice_char_cwd.resolve()
-        if os.environ.get("NGSPICE_CWD_PDK", "").strip() in ("1", "true", "yes"):
-            ngspice_cwd = Path(sky130_model).expanduser().resolve().parent
+        pdk_ngspice_dir = Path(sky130_model).expanduser().resolve().parent
+        use_repo_only = os.environ.get("NGSPICE_CWD_REPO", "").strip() in ("1", "true", "yes")
+        if use_repo_only:
+            ngspice_cwd = ngspice_char_cwd.resolve()
+        else:
+            try:
+                shutil.copy2(spiceinit_src, pdk_ngspice_dir / ".spiceinit")
+            except OSError as exc:
+                raise SystemExit(
+                    f"Could not copy {spiceinit_src} to {pdk_ngspice_dir}/.spiceinit ({exc}).\n"
+                    "Fix permissions on the PDK directory, or set NGSPICE_CWD_REPO=1 (may break simulations)."
+                ) from exc
+            ngspice_cwd = pdk_ngspice_dir
 
     cfg = RunConfig(
         root=root,

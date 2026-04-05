@@ -97,10 +97,10 @@ instances (`l=$`, `w=$`) or “redefinition ignored” warnings.
 
 - Ensure `spice/ngspice_char_cwd/.spiceinit` is present (it is committed in this repo).
 - Some **Homebrew** builds of **ngspice 45** on **Apple Silicon** still fail on SkyWater’s binned `.model ...__model.N` cards even with `.spiceinit`. If you see this after the fixes above, run the same flow on the **course Linux VM**, a conda/pip environment that ships a known-good ngspice, or an older ngspice build your instructor recommends.
-- Optional: force the simulator cwd to the PDK `ngspice` directory (some setups need this for relative includes):
+- By default the driver sets ngspice **cwd** to the PDK folder that contains `sky130.lib.spice` and copies `spice/ngspice_char_cwd/.spiceinit` there so relative includes and model cards resolve. To force the old **repo-only** cwd (usually wrong for volare):
 
 ```bash
-export NGSPICE_CWD_PDK=1
+export NGSPICE_CWD_REPO=1
 ```
 
 ## Notes on pin order and arcs
