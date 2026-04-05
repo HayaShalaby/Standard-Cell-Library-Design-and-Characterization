@@ -19,6 +19,7 @@ This repository contains the cell library netlists and an automation scaffold fo
 
 - `spice/stdcells.lib.spice` - your 13 `.subckt` definitions live here.
 - `spice/templates/char_testbench.spice.j2` - parametrized ngspice deck template.
+- `spice/ngspice_char_cwd/.spiceinit` - SkyWater/ngspice compatibility (`ngbehavior`, `skywaterpdk`, `ng_nomodcheck`). The driver runs `ngspice` with this folder as the process working directory so batch mode picks it up.
 - `scripts/run_characterization.py` - main sweep driver.
 - `results/raw/` - ngspice netlists and logs.
 - `results/nldm/` - NLDM JSON tables per cell.
@@ -75,6 +76,31 @@ python3 scripts/run_characterization.py --cells invx1 invx2 invx4 invx8
 
 ```bash
 python3 scripts/run_characterization.py
+```
+
+## Troubleshooting simulations
+
+### Do not double-include the TT corner
+
+Use **only**:
+
+```spice
+.lib "/path/to/sky130.lib.spice" tt
+.temp 25
+```
+
+The file `sky130.lib.spice` already pulls in `corners/tt.spice` inside the `tt` section. Adding a second
+`.include .../corners/tt.spice` in the same deck reloads all MOSFET subcircuits and can produce bogus
+instances (`l=$`, `w=$`) or “redefinition ignored” warnings.
+
+### `could not find a valid modelname` (e.g. `sky130_fd_pr__pfet_01v8__model`)
+
+- Ensure `spice/ngspice_char_cwd/.spiceinit` is present (it is committed in this repo).
+- Some **Homebrew** builds of **ngspice 45** on **Apple Silicon** still fail on SkyWater’s binned `.model ...__model.N` cards even with `.spiceinit`. If you see this after the fixes above, run the same flow on the **course Linux VM**, a conda/pip environment that ships a known-good ngspice, or an older ngspice build your instructor recommends.
+- Optional: force the simulator cwd to the PDK `ngspice` directory (some setups need this for relative includes):
+
+```bash
+export NGSPICE_CWD_PDK=1
 ```
 
 ## Notes on pin order and arcs

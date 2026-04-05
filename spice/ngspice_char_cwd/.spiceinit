@@ -1,0 +1,4 @@
+* Read when ngspice's process cwd is this directory (see run_characterization.py).
+set ngbehavior=hsa
+set skywaterpdk
+set ng_nomodcheck

@@ -48,6 +48,8 @@ class RunConfig:
     ngspice_bin: str = "ngspice"
     dry_run: bool = False
     smoke_test: bool = False
+    # cwd for ngspice: directory containing sky130.lib.spice (PDK .include paths are relative).
+    ngspice_cwd: Optional[Path] = None
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run ngspice NLDM characterization sweeps.")
@@ -111,10 +113,20 @@ def input_bias_for_cell(cell: str) -> Dict[str, str]:
         return {"b_level": "0", "c_level": "{VDD}"}
     return {"b_level": "0", "c_level": "0"}
 
-def run_ngspice(ngspice_bin: str, deck_path: Path, log_path: Path) -> subprocess.CompletedProcess:
-    sky130_lib_dir = Path(os.environ.get("SKY130_MODEL_LIB", "")).parent
+def run_ngspice(
+    ngspice_bin: str,
+    deck_path: Path,
+    log_path: Path,
+    cwd: Optional[Path] = None,
+) -> subprocess.CompletedProcess:
     cmd = [ngspice_bin, "-b", "-o", str(log_path), str(deck_path)]
-    return subprocess.run(cmd, check=False, capture_output=True, text=True, cwd=sky130_lib_dir if sky130_lib_dir.is_dir() else None)
+    return subprocess.run(
+        cmd,
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(cwd) if cwd is not None and cwd.is_dir() else None,
+    )
 
 def parse_measures(log_text: str) -> Dict[str, Optional[float]]:
     result: Dict[str, Optional[float]] = {k: None for k in MEASURE_KEYS}
@@ -156,13 +168,24 @@ def characterize_cell(cell: str, cfg: RunConfig, template_text: str) -> Dict[str
             if cfg.dry_run:
                 continue
 
-            proc = run_ngspice(cfg.ngspice_bin, deck_path, log_path)
+            proc = run_ngspice(cfg.ngspice_bin, deck_path, log_path, cwd=cfg.ngspice_cwd)
             if proc.returncode != 0:
+                err_tail = proc.stderr.strip()
+                if err_tail:
+                    prev = (
+                        log_path.read_text(encoding="utf-8", errors="ignore")
+                        if log_path.is_file()
+                        else ""
+                    )
+                    log_path.write_text(
+                        prev + "\n\n***** ngspice stderr *****\n" + err_tail + "\n",
+                        encoding="utf-8",
+                    )
                 failures.append(
                     {
                         "run": run_name,
                         "error": "ngspice_failed",
-                        "stderr": proc.stderr.strip(),
+                        "stderr": err_tail,
                     }
                 )
                 continue
@@ -241,11 +264,26 @@ def main() -> int:
 
         sky130_model = str(sky130_path)
         stdcell_lib = str(stdcell_path)
-        sky130_dir = str(Path(sky130_model).parent)
-        deck_preamble = f'.lib "{sky130_model}" tt\n.include "{sky130_dir}/corners/tt.spice"\n.temp 25\n\n'
+        # Only .lib ... tt — sky130.lib.spice already .include's corners/tt.spice inside the tt block.
+        # A second .include of tt.spice duplicates models and breaks parameter expansion (l=$, w=$).
+        deck_preamble = f'.lib "{sky130_model}" tt\n.temp 25\n\n'
 
     if not shutil.which(args.ngspice_bin):
         raise SystemExit(f"ngspice executable not found: {args.ngspice_bin}")
+
+    # Run ngspice with cwd = repo directory that contains .spiceinit so SkyWater
+    # compatibility flags load in batch mode (not only from ~/.spiceinit).
+    ngspice_char_cwd = root / "spice" / "ngspice_char_cwd"
+    ngspice_cwd: Optional[Path] = None
+    if not args.smoke_test and sky130_model:
+        ensure_dirs(ngspice_char_cwd)
+        if not (ngspice_char_cwd / ".spiceinit").is_file():
+            raise SystemExit(
+                f"Missing {ngspice_char_cwd / '.spiceinit'} — restore it from the repository."
+            )
+        ngspice_cwd = ngspice_char_cwd.resolve()
+        if os.environ.get("NGSPICE_CWD_PDK", "").strip() in ("1", "true", "yes"):
+            ngspice_cwd = Path(sky130_model).expanduser().resolve().parent
 
     cfg = RunConfig(
         root=root,
@@ -258,6 +296,7 @@ def main() -> int:
         ngspice_bin=args.ngspice_bin,
         dry_run=args.dry_run,
         smoke_test=args.smoke_test,
+        ngspice_cwd=ngspice_cwd,
     )
 
     ensure_dirs(cfg.raw_root, cfg.out_root, root / "results" / "plots")
