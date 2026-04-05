@@ -193,7 +193,7 @@ def parse_args() -> argparse.Namespace:
 def load_template(template_path: Path) -> str:
     return template_path.read_text(encoding="utf-8")
 
-def render_template(template_text: str, context: Dict[str, str]) -> str:
+def render_template(template_text: str, context: Dict[str, object]) -> str:
     if Template is not None:
         return Template(template_text).render(**context)
 
@@ -201,6 +201,21 @@ def render_template(template_text: str, context: Dict[str, str]) -> str:
     for key, value in context.items():
         rendered = rendered.replace("{{ " + key + " }}", str(value))
     return rendered
+
+
+def sky130_control_block_for_deck(smoke_test: bool) -> str:
+    """Inline ngspice sets so batch runs see SkyWater __model wrappers even if .spiceinit is skipped."""
+    if smoke_test:
+        return ""
+    return (
+        "* SkyWater/ngspice compatibility (must run before .lib; mirrors libs.tech/ngspice/.spiceinit).\n"
+        ".control\n"
+        "set ngbehavior=hsa\n"
+        "set skywaterpdk\n"
+        "set ng_nomodcheck\n"
+        ".endc\n"
+        "\n"
+    )
 
 def build_xdut_line(cell: str) -> str:
     if cell.startswith("inv"):
@@ -284,6 +299,7 @@ def characterize_cell(cell: str, cfg: RunConfig, template_text: str) -> Dict[str
                 "stdcell_lib_path": cfg.stdcell_lib_path,
                 "sky130_model_lib": cfg.sky130_model_lib,
                 "deck_preamble": cfg.deck_preamble,
+                "sky130_control_block": sky130_control_block_for_deck(cfg.smoke_test),
                 "xdut_line": build_xdut_line(cell),
                 **input_bias_for_cell(cell),
             }
@@ -429,9 +445,14 @@ def main() -> int:
 
         sky130_model = str(sky130_path)
         stdcell_lib = str(stdcell_path)
+        # Optional vendor spinit next to sky130.lib.spice (some volare/open_pdks layouts).
+        spinit_path = sky130_path.parent / "spinit"
+        spinit_line = (
+            f'.include "{spinit_path.resolve()}"\n' if spinit_path.is_file() else ""
+        )
         # Only .lib ... tt — sky130.lib.spice already .include's corners/tt.spice inside the tt block.
         # A second .include of tt.spice duplicates models and breaks parameter expansion (l=$, w=$).
-        deck_preamble = f'.lib "{sky130_model}" tt\n.temp 25\n\n'
+        deck_preamble = spinit_line + f'.lib "{sky130_model}" tt\n.temp 25\n\n'
 
     if not shutil.which(args.ngspice_bin):
         raise SystemExit(f"ngspice executable not found: {args.ngspice_bin}")
