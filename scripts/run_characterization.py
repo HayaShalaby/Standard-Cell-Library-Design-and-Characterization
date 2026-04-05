@@ -203,20 +203,6 @@ def render_template(template_text: str, context: Dict[str, object]) -> str:
     return rendered
 
 
-def sky130_control_block_for_deck(smoke_test: bool) -> str:
-    """Inline ngspice sets so batch runs see SkyWater __model wrappers even if .spiceinit is skipped."""
-    if smoke_test:
-        return ""
-    return (
-        "* SkyWater/ngspice compatibility (must run before .lib; mirrors libs.tech/ngspice/.spiceinit).\n"
-        ".control\n"
-        "set ngbehavior=hsa\n"
-        "set skywaterpdk\n"
-        "set ng_nomodcheck\n"
-        ".endc\n"
-        "\n"
-    )
-
 def build_xdut_line(cell: str) -> str:
     if cell.startswith("inv"):
         return f"XDUT a y vdd vss {cell}"
@@ -299,7 +285,6 @@ def characterize_cell(cell: str, cfg: RunConfig, template_text: str) -> Dict[str
                 "stdcell_lib_path": cfg.stdcell_lib_path,
                 "sky130_model_lib": cfg.sky130_model_lib,
                 "deck_preamble": cfg.deck_preamble,
-                "sky130_control_block": sky130_control_block_for_deck(cfg.smoke_test),
                 "xdut_line": build_xdut_line(cell),
                 **input_bias_for_cell(cell),
             }
@@ -514,7 +499,10 @@ def main() -> int:
     if not args.smoke_test and not args.dry_run:
         print(
             "SKY130: first ngspice run can take several minutes while models compile; "
-            "little terminal output is normal. Watch: ls -la results/raw/<cell>/\n",
+            "little terminal output is normal. Watch: ls -la results/raw/<cell>/\n"
+            "If logs show can't find model 'sky130_fd_pr__*__model', apt's ngspice-36 is often missing "
+            "SkyWater fixes — try conda-forge 'ngspice', a current build from https://ngspice.sourceforge.net, "
+            "or the ngspice version your course documents.\n",
             flush=True,
         )
 
