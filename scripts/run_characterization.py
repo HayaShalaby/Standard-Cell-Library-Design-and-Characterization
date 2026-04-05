@@ -112,8 +112,9 @@ def input_bias_for_cell(cell: str) -> Dict[str, str]:
     return {"b_level": "0", "c_level": "0"}
 
 def run_ngspice(ngspice_bin: str, deck_path: Path, log_path: Path) -> subprocess.CompletedProcess:
+    sky130_lib_dir = Path(os.environ.get("SKY130_MODEL_LIB", "")).parent
     cmd = [ngspice_bin, "-b", "-o", str(log_path), str(deck_path)]
-    return subprocess.run(cmd, check=False, capture_output=True, text=True)
+    return subprocess.run(cmd, check=False, capture_output=True, text=True, cwd=sky130_lib_dir if sky130_lib_dir.is_dir() else None)
 
 def parse_measures(log_text: str) -> Dict[str, Optional[float]]:
     result: Dict[str, Optional[float]] = {k: None for k in MEASURE_KEYS}
@@ -240,7 +241,8 @@ def main() -> int:
 
         sky130_model = str(sky130_path)
         stdcell_lib = str(stdcell_path)
-        deck_preamble = f'.lib "{sky130_model}" tt\n.temp 25\n\n'
+        sky130_dir = str(Path(sky130_model).parent)
+        deck_preamble = f'.lib "{sky130_model}" tt\n.include "{sky130_dir}/corners/tt.spice"\n.temp 25\n\n'
 
     if not shutil.which(args.ngspice_bin):
         raise SystemExit(f"ngspice executable not found: {args.ngspice_bin}")
