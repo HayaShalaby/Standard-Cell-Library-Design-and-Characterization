@@ -56,15 +56,36 @@ class RunConfig:
     ngspice_cwd: Optional[Path] = None
 
 
-def _diag_preview(log_text: str, stdout: str, stderr: str, limit: int = 3500) -> str:
-    """Last chunks of log/stdout/stderr for failed runs (ngspice often omits stderr)."""
+def _extract_error_lines(blob: str, max_lines: int = 40) -> str:
+    hits: List[str] = []
+    for ln in blob.splitlines():
+        if re.search(r"(?i)\berror\b|\bfatal\b|could not find|undefined|syntax error", ln):
+            hits.append(ln.rstrip())
+            if len(hits) >= max_lines:
+                break
+    return "\n".join(hits) if hits else ""
+
+
+def _diag_preview(log_text: str, stdout: str, stderr: str) -> str:
+    """SKY130 logs can be huge; errors are often at the top, .measure lines in the middle."""
     chunks: List[str] = []
-    per = max(800, limit // 3)
-    for label, blob in (("log (-o file)", log_text), ("stdout", stdout), ("stderr", stderr)):
+    lt = log_text or ""
+    if lt.strip():
+        err_lines = _extract_error_lines(lt)
+        if err_lines:
+            chunks.append(f"--- log: error/fatal lines (first matches) ---\n{err_lines}")
+        n = len(lt)
+        head_n, tail_n = 8000, 12000
+        if n <= head_n + tail_n:
+            chunks.append(f"--- log (-o file) full ({n} chars) ---\n{lt}")
+        else:
+            chunks.append(f"--- log head ({n} chars total) ---\n{lt[:head_n]}")
+            chunks.append(f"--- log tail ---\n{lt[-tail_n:]}")
+    for label, blob in (("stdout", stdout), ("stderr", stderr)):
         s = (blob or "").strip()
         if not s:
             continue
-        tail = s[-per:] if len(s) > per else s
+        tail = s[-2500:] if len(s) > 2500 else s
         chunks.append(f"--- {label} (tail) ---\n{tail}")
     return "\n".join(chunks) if chunks else "(no log/stdout/stderr captured)"
 
@@ -110,7 +131,7 @@ def _parallel_sim_worker(payload: Tuple[object, ...]) -> Dict[str, object]:
             log_text = log_path.read_text(encoding="utf-8", errors="ignore")
     # ngspice may exit non-zero on benign warnings while still printing valid measurements.
     rc = raw_rc
-    if rc != 0 and all(meas.get(k) is not None for k in MEASURE_KEYS):
+    if rc != 0 and _measures_all_valid(meas):
         rc = 0
     return {
         "i": i,
@@ -205,16 +226,36 @@ def input_bias_for_cell(cell: str) -> Dict[str, str]:
 
 def parse_measures(log_text: str) -> Dict[str, Optional[float]]:
     result: Dict[str, Optional[float]] = {k: None for k in MEASURE_KEYS}
-    # Allow '=' or ':'; skip "failed"/"nan" by requiring a numeric capture.
+    # Allow '=' or ':'; ngspice-36+ may use spaces or different case in batch logs.
+    key_alt = "|".join(re.escape(k) for k in MEASURE_KEYS)
     pat = re.compile(
-        rf"\b(?P<name>{'|'.join(re.escape(k) for k in MEASURE_KEYS)})\s*[:=]\s*"
-        r"(?P<val>[+-]?(?:\d+\.?\d*|\d*\.?\d+)(?:[eE][+-]?\d+)?)"
+        rf"\b(?P<name>{key_alt})\s*[:=]\s*"
+        r"(?P<val>[+-]?(?:\d+\.?\d*|\d*\.?\d+)(?:[eE][+-]?\d+)?|nan|inf)",
+        re.IGNORECASE,
     )
     for m in pat.finditer(log_text):
-        name = m.group("name")
-        if name in result:
-            result[name] = float(m.group("val")) * 1e9  # seconds -> ns
+        name = m.group("name").lower()
+        if name not in result:
+            continue
+        vraw = m.group("val")
+        if vraw.lower() == "nan":
+            result[name] = float("nan")
+        elif vraw.lower() == "inf":
+            result[name] = float("inf")
+        else:
+            result[name] = float(vraw) * 1e9  # seconds -> ns
     return result
+
+
+def _measures_all_valid(m: Dict[str, Optional[float]]) -> bool:
+    for k in MEASURE_KEYS:
+        v = m.get(k)
+        if v is None:
+            return False
+        if isinstance(v, float) and (v != v):  # NaN
+            return False
+    return True
+
 
 def ensure_dirs(*paths: Path) -> None:
     for p in paths:
@@ -449,6 +490,13 @@ def main() -> int:
     ensure_dirs(cfg.raw_root, cfg.out_root, root / "results" / "plots")
     template_text = load_template(cfg.template_path)
 
+    if not args.smoke_test and not args.dry_run:
+        print(
+            "SKY130: first ngspice run can take several minutes while models compile; "
+            "little terminal output is normal. Watch: ls -la results/raw/<cell>/\n",
+            flush=True,
+        )
+
     for cell in args.cells:
         data = characterize_cell(cell, cfg, template_text)
         out_file = cfg.out_root / f"{cell}.json"
@@ -461,7 +509,7 @@ def main() -> int:
             preview = ex.pop("diag_preview", None)
             print(f"       example: {ex}")
             if preview:
-                cap = 1200
+                cap = 9000
                 tail = preview if len(preview) <= cap else "…\n" + preview[-cap:]
                 print(f"       diag tail:\n{tail}")
 
