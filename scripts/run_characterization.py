@@ -234,15 +234,23 @@ def characterize_cell(cell: str, cfg: RunConfig, template_text: str) -> Dict[str
             )
 
     if not cfg.dry_run and jobs_list:
+        total = len(jobs_list)
+        print(f"[run] {cell}: {total} simulation(s), jobs={cfg.jobs}", flush=True)
+        done = 0
         if cfg.jobs <= 1:
             for payload in jobs_list:
                 result = _parallel_sim_worker(payload)
                 _apply_sim_result(result, tables, failures)
+                done += 1
+                print(f"  [{done}/{total}] {result['run_name']}", flush=True)
         else:
             with ProcessPoolExecutor(max_workers=cfg.jobs) as pool:
                 futures = [pool.submit(_parallel_sim_worker, p) for p in jobs_list]
                 for fut in as_completed(futures):
-                    _apply_sim_result(fut.result(), tables, failures)
+                    result = fut.result()
+                    _apply_sim_result(result, tables, failures)
+                    done += 1
+                    print(f"  [{done}/{total}] {result['run_name']}", flush=True)
 
     out: Dict[str, object] = {
         "cell": cell,
