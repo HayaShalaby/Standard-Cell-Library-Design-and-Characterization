@@ -6,9 +6,10 @@ import os
 import re
 import shutil
 import subprocess
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 try:
     from jinja2 import Template
@@ -45,11 +46,54 @@ class RunConfig:
     stdcell_lib_path: str
     sky130_model_lib: str
     deck_preamble: str
+    tin_vector_ns: List[float]
+    load_cap_pf: List[float]
     ngspice_bin: str = "ngspice"
     dry_run: bool = False
     smoke_test: bool = False
+    jobs: int = 1
     # cwd for ngspice: directory containing sky130.lib.spice (PDK .include paths are relative).
     ngspice_cwd: Optional[Path] = None
+
+
+def _parallel_sim_worker(payload: Tuple[object, ...]) -> Dict[str, object]:
+    """Picklable worker: run one ngspice job. Must stay at module top level."""
+    (
+        i,
+        j,
+        run_name,
+        ngspice_bin,
+        cwd_str,
+        deck_path_s,
+        log_path_s,
+        deck_content,
+    ) = payload
+    deck_path = Path(deck_path_s)
+    log_path = Path(log_path_s)
+    deck_path.write_text(deck_content, encoding="utf-8")
+    cmd = [ngspice_bin, "-b", "-o", str(log_path), str(deck_path)]
+    proc = subprocess.run(
+        cmd,
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=cwd_str if cwd_str else None,
+    )
+    log_text = log_path.read_text(encoding="utf-8", errors="ignore") if log_path.is_file() else ""
+    if proc.returncode != 0 and proc.stderr.strip():
+        log_path.write_text(
+            log_text + "\n\n***** ngspice stderr *****\n" + proc.stderr.strip() + "\n",
+            encoding="utf-8",
+        )
+    meas = parse_measures(log_text)
+    return {
+        "i": i,
+        "j": j,
+        "run_name": run_name,
+        "returncode": proc.returncode,
+        "stderr": proc.stderr.strip(),
+        "meas": meas,
+    }
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run ngspice NLDM characterization sweeps.")
@@ -75,6 +119,24 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Use bundled behavioral cell stubs and skip sky130.lib.spice. "
             "For validating automation only — not for submission timing."
+        ),
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help=(
+            "Only 2×2 corner grid (min/max tin × min/max load) = 4 sims per cell. "
+            "Faster for debugging; not the full 7×7 NLDM required for submission."
+        ),
+    )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        metavar="N",
+        help=(
+            "Run up to N ngspice processes in parallel (default 1). "
+            "Try 2–4 on multi-core machines; each job loads the full PDK (~RAM heavy)."
         ),
     )
     return parser.parse_args()
@@ -113,21 +175,6 @@ def input_bias_for_cell(cell: str) -> Dict[str, str]:
         return {"b_level": "0", "c_level": "{VDD}"}
     return {"b_level": "0", "c_level": "0"}
 
-def run_ngspice(
-    ngspice_bin: str,
-    deck_path: Path,
-    log_path: Path,
-    cwd: Optional[Path] = None,
-) -> subprocess.CompletedProcess:
-    cmd = [ngspice_bin, "-b", "-o", str(log_path), str(deck_path)]
-    return subprocess.run(
-        cmd,
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=str(cwd) if cwd is not None and cwd.is_dir() else None,
-    )
-
 def parse_measures(log_text: str) -> Dict[str, Optional[float]]:
     result: Dict[str, Optional[float]] = {k: None for k in MEASURE_KEYS}
     for key in MEASURE_KEYS:
@@ -144,11 +191,14 @@ def characterize_cell(cell: str, cfg: RunConfig, template_text: str) -> Dict[str
     cell_raw = cfg.raw_root / cell
     ensure_dirs(cell_raw)
 
-    tables = {k: [[None for _ in CLOAD_VECTOR_PF] for _ in TIN_VECTOR_NS] for k in MEASURE_KEYS}
+    tins = cfg.tin_vector_ns
+    cloads = cfg.load_cap_pf
+    tables = {k: [[None for _ in cloads] for _ in tins] for k in MEASURE_KEYS}
     failures: List[Dict[str, object]] = []
 
-    for i, tin_ns in enumerate(TIN_VECTOR_NS):
-        for j, cload_pf in enumerate(CLOAD_VECTOR_PF):
+    jobs_list: List[Tuple[object, ...]] = []
+    for i, tin_ns in enumerate(tins):
+        for j, cload_pf in enumerate(cloads):
             run_name = f"{cell}_tin{tin_ns:.4f}_cl{cload_pf:.4f}"
             deck_path = cell_raw / f"{run_name}.spice"
             log_path = cell_raw / f"{run_name}.log"
@@ -163,58 +213,89 @@ def characterize_cell(cell: str, cfg: RunConfig, template_text: str) -> Dict[str
                 "xdut_line": build_xdut_line(cell),
                 **input_bias_for_cell(cell),
             }
-            deck_path.write_text(render_template(template_text, context), encoding="utf-8")
+            deck_content = render_template(template_text, context)
 
             if cfg.dry_run:
+                deck_path.write_text(deck_content, encoding="utf-8")
                 continue
 
-            proc = run_ngspice(cfg.ngspice_bin, deck_path, log_path, cwd=cfg.ngspice_cwd)
-            if proc.returncode != 0:
-                err_tail = proc.stderr.strip()
-                if err_tail:
-                    prev = (
-                        log_path.read_text(encoding="utf-8", errors="ignore")
-                        if log_path.is_file()
-                        else ""
-                    )
-                    log_path.write_text(
-                        prev + "\n\n***** ngspice stderr *****\n" + err_tail + "\n",
-                        encoding="utf-8",
-                    )
-                failures.append(
-                    {
-                        "run": run_name,
-                        "error": "ngspice_failed",
-                        "stderr": err_tail,
-                    }
+            cwd_str = str(cfg.ngspice_cwd) if cfg.ngspice_cwd is not None and cfg.ngspice_cwd.is_dir() else ""
+            jobs_list.append(
+                (
+                    i,
+                    j,
+                    run_name,
+                    cfg.ngspice_bin,
+                    cwd_str,
+                    str(deck_path.resolve()),
+                    str(log_path.resolve()),
+                    deck_content,
                 )
-                continue
+            )
 
-            log_text = log_path.read_text(encoding="utf-8", errors="ignore")
-            meas = parse_measures(log_text)
-            for key in MEASURE_KEYS:
-                tables[key][i][j] = meas[key]
-                if meas[key] is None:
-                    failures.append(
-                        {
-                            "run": run_name,
-                            "error": f"missing_measure:{key}",
-                        }
-                    )
+    if not cfg.dry_run and jobs_list:
+        if cfg.jobs <= 1:
+            for payload in jobs_list:
+                result = _parallel_sim_worker(payload)
+                _apply_sim_result(result, tables, failures)
+        else:
+            with ProcessPoolExecutor(max_workers=cfg.jobs) as pool:
+                futures = [pool.submit(_parallel_sim_worker, p) for p in jobs_list]
+                for fut in as_completed(futures):
+                    _apply_sim_result(fut.result(), tables, failures)
 
     out: Dict[str, object] = {
         "cell": cell,
-        "input_transition_ns": TIN_VECTOR_NS,
-        "load_cap_pf": CLOAD_VECTOR_PF,
+        "input_transition_ns": tins,
+        "load_cap_pf": cloads,
         "tables_ns": tables,
         "failures": failures,
     }
     if cfg.smoke_test:
         out["mode"] = "smoke_test"
+    if len(tins) != len(TIN_VECTOR_NS) or len(cloads) != len(CLOAD_VECTOR_PF):
+        out["grid_note"] = "non_standard_grid"
     return out
+
+
+def _apply_sim_result(
+    result: Dict[str, object],
+    tables: Dict[str, List[List[Optional[float]]]],
+    failures: List[Dict[str, object]],
+) -> None:
+    i = int(result["i"])
+    j = int(result["j"])
+    run_name = str(result["run_name"])
+    rc = int(result["returncode"])
+    meas = result["meas"]
+    assert isinstance(meas, dict)
+
+    if rc != 0:
+        failures.append(
+            {
+                "run": run_name,
+                "error": "ngspice_failed",
+                "stderr": result.get("stderr", ""),
+            }
+        )
+        return
+
+    for key in MEASURE_KEYS:
+        v = meas.get(key)
+        tables[key][i][j] = v
+        if v is None:
+            failures.append(
+                {
+                    "run": run_name,
+                    "error": f"missing_measure:{key}",
+                }
+            )
 
 def main() -> int:
     args = parse_args()
+    if args.jobs < 1:
+        raise SystemExit("--jobs must be >= 1")
+
     root = Path(__file__).resolve().parents[1]
     template_path = root / "spice" / "templates" / "char_testbench.spice.j2"
     raw_root = root / "results" / "raw"
@@ -299,6 +380,12 @@ def main() -> int:
                 ) from exc
             ngspice_cwd = pdk_ngspice_dir
 
+    tin_vec = list(TIN_VECTOR_NS)
+    cload_vec = list(CLOAD_VECTOR_PF)
+    if args.quick:
+        tin_vec = [TIN_VECTOR_NS[0], TIN_VECTOR_NS[-1]]
+        cload_vec = [CLOAD_VECTOR_PF[0], CLOAD_VECTOR_PF[-1]]
+
     cfg = RunConfig(
         root=root,
         template_path=template_path,
@@ -307,9 +394,12 @@ def main() -> int:
         stdcell_lib_path=stdcell_lib,
         sky130_model_lib=sky130_model,
         deck_preamble=deck_preamble,
+        tin_vector_ns=tin_vec,
+        load_cap_pf=cload_vec,
         ngspice_bin=args.ngspice_bin,
         dry_run=args.dry_run,
         smoke_test=args.smoke_test,
+        jobs=args.jobs,
         ngspice_cwd=ngspice_cwd,
     )
 
@@ -328,6 +418,8 @@ def main() -> int:
         print("Dry run completed. Decks generated without ngspice execution.")
     elif args.smoke_test:
         print("Smoke test used behavioral fixtures — replace with SKY130 + real cells for submission.")
+    if args.quick and not args.dry_run:
+        print("Quick 2×2 grid — re-run without --quick for full 7×7 NLDM tables.")
 
     return 0
 
