@@ -80,18 +80,26 @@ def _parallel_sim_worker(payload: Tuple[object, ...]) -> Dict[str, object]:
         cwd=cwd_str if cwd_str else None,
     )
     log_text = log_path.read_text(encoding="utf-8", errors="ignore") if log_path.is_file() else ""
-    if proc.returncode != 0 and proc.stderr.strip():
+    out = proc.stdout or ""
+    err = proc.stderr or ""
+    # Batch ngspice often prints .measure results in the -o log, but some builds echo them on stdout/stderr.
+    meas_blob = "\n".join((log_text, out, err))
+    meas = parse_measures(meas_blob)
+    if proc.returncode != 0 and err.strip():
         log_path.write_text(
-            log_text + "\n\n***** ngspice stderr *****\n" + proc.stderr.strip() + "\n",
+            log_text + "\n\n***** ngspice stderr *****\n" + err.strip() + "\n",
             encoding="utf-8",
         )
-    meas = parse_measures(log_text)
+    # ngspice may exit non-zero on benign warnings while still printing valid measurements.
+    rc = proc.returncode
+    if rc != 0 and all(meas.get(k) is not None for k in MEASURE_KEYS):
+        rc = 0
     return {
         "i": i,
         "j": j,
         "run_name": run_name,
-        "returncode": proc.returncode,
-        "stderr": proc.stderr.strip(),
+        "returncode": rc,
+        "stderr": err.strip(),
         "meas": meas,
     }
 
@@ -177,10 +185,15 @@ def input_bias_for_cell(cell: str) -> Dict[str, str]:
 
 def parse_measures(log_text: str) -> Dict[str, Optional[float]]:
     result: Dict[str, Optional[float]] = {k: None for k in MEASURE_KEYS}
-    for key in MEASURE_KEYS:
-        m = re.search(rf"\b{re.escape(key)}\s*=\s*([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)", log_text)
-        if m:
-            result[key] = float(m.group(1)) * 1e9  # seconds = ns
+    # Allow '=' or ':'; skip "failed"/"nan" by requiring a numeric capture.
+    pat = re.compile(
+        rf"\b(?P<name>{'|'.join(re.escape(k) for k in MEASURE_KEYS)})\s*[:=]\s*"
+        r"(?P<val>[+-]?(?:\d+\.?\d*|\d*\.?\d+)(?:[eE][+-]?\d+)?)"
+    )
+    for m in pat.finditer(log_text):
+        name = m.group("name")
+        if name in result:
+            result[name] = float(m.group("val")) * 1e9  # seconds -> ns
     return result
 
 def ensure_dirs(*paths: Path) -> None:
@@ -420,7 +433,10 @@ def main() -> int:
         out_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
         print(f"[done] {cell} -> {out_file}")
         if data["failures"]:
-            print(f"[warn] {cell}: {len(data['failures'])} issues detected")
+            fails = data["failures"]
+            print(f"[warn] {cell}: {len(fails)} issues detected")
+            ex = fails[0]
+            print(f"       example: {ex}")
 
     if args.dry_run:
         print("Dry run completed. Decks generated without ngspice execution.")
