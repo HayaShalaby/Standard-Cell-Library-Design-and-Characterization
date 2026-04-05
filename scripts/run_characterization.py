@@ -56,6 +56,19 @@ class RunConfig:
     ngspice_cwd: Optional[Path] = None
 
 
+def _diag_preview(log_text: str, stdout: str, stderr: str, limit: int = 3500) -> str:
+    """Last chunks of log/stdout/stderr for failed runs (ngspice often omits stderr)."""
+    chunks: List[str] = []
+    per = max(800, limit // 3)
+    for label, blob in (("log (-o file)", log_text), ("stdout", stdout), ("stderr", stderr)):
+        s = (blob or "").strip()
+        if not s:
+            continue
+        tail = s[-per:] if len(s) > per else s
+        chunks.append(f"--- {label} (tail) ---\n{tail}")
+    return "\n".join(chunks) if chunks else "(no log/stdout/stderr captured)"
+
+
 def _parallel_sim_worker(payload: Tuple[object, ...]) -> Dict[str, object]:
     """Picklable worker: run one ngspice job. Must stay at module top level."""
     (
@@ -85,13 +98,18 @@ def _parallel_sim_worker(payload: Tuple[object, ...]) -> Dict[str, object]:
     # Batch ngspice often prints .measure results in the -o log, but some builds echo them on stdout/stderr.
     meas_blob = "\n".join((log_text, out, err))
     meas = parse_measures(meas_blob)
-    if proc.returncode != 0 and err.strip():
-        log_path.write_text(
-            log_text + "\n\n***** ngspice stderr *****\n" + err.strip() + "\n",
-            encoding="utf-8",
-        )
+    raw_rc = proc.returncode
+    if raw_rc != 0:
+        extra = ""
+        if out.strip():
+            extra += "\n\n***** ngspice captured stdout *****\n" + out
+        if err.strip():
+            extra += "\n\n***** ngspice captured stderr *****\n" + err
+        if extra:
+            log_path.write_text(log_text + extra, encoding="utf-8")
+            log_text = log_path.read_text(encoding="utf-8", errors="ignore")
     # ngspice may exit non-zero on benign warnings while still printing valid measurements.
-    rc = proc.returncode
+    rc = raw_rc
     if rc != 0 and all(meas.get(k) is not None for k in MEASURE_KEYS):
         rc = 0
     return {
@@ -99,7 +117,9 @@ def _parallel_sim_worker(payload: Tuple[object, ...]) -> Dict[str, object]:
         "j": j,
         "run_name": run_name,
         "returncode": rc,
+        "ngspice_exit_code": raw_rc,
         "stderr": err.strip(),
+        "diag_preview": _diag_preview(log_text, out, err),
         "meas": meas,
     }
 
@@ -296,7 +316,9 @@ def _apply_sim_result(
             {
                 "run": run_name,
                 "error": "ngspice_failed",
+                "ngspice_exit_code": result.get("ngspice_exit_code", rc),
                 "stderr": result.get("stderr", ""),
+                "diag_preview": result.get("diag_preview", ""),
             }
         )
         return
@@ -435,8 +457,13 @@ def main() -> int:
         if data["failures"]:
             fails = data["failures"]
             print(f"[warn] {cell}: {len(fails)} issues detected")
-            ex = fails[0]
+            ex = dict(fails[0])  # copy so we can shorten for terminal
+            preview = ex.pop("diag_preview", None)
             print(f"       example: {ex}")
+            if preview:
+                cap = 1200
+                tail = preview if len(preview) <= cap else "…\n" + preview[-cap:]
+                print(f"       diag tail:\n{tail}")
 
     if args.dry_run:
         print("Dry run completed. Decks generated without ngspice execution.")
