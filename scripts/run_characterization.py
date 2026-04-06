@@ -435,6 +435,11 @@ def main() -> int:
         # circuit line 3 and fail with "Unable to find definition of model" on `set ngbehavior=hsa`.
         # Only .lib ... tt — sky130.lib.spice already .include's corners/tt.spice inside the tt block.
         # A second .include of tt.spice duplicates models and breaks parameter expansion (l=$, w=$).
+        # Only .lib ... tt — sky130.lib.spice already .include's corners/tt.spice inside the tt block.
+        # A second .include of tt.spice duplicates models and breaks parameter expansion (l=$, w=$).
+        # Do NOT .include the vendor "spinit" file — it contains interactive `set` commands that are
+        # not valid SPICE netlist syntax. Those settings are already applied via the .spiceinit that
+        # the script copies to the ngspice cwd (PDK directory) before each run.
         deck_preamble = f'.lib "{sky130_model}" tt\n.temp 25\n\n'
 
     if not shutil.which(args.ngspice_bin):

@@ -6,9 +6,9 @@
 
 .param VDD=1.8
 .param TIN={{ tin_ns }}n
-.param TSTART=1n
-.param TPW=3n
-.param TPER=8n
+.param TSTART=5n
+.param TPW=10n
+.param TPER=25n
 .param CLOAD={{ cload_pf }}p
 
 VDD vdd 0 DC {VDD}
@@ -28,7 +28,7 @@ VC c 0 DC {{ c_level }}
 
 CLOAD y 0 {CLOAD}
 
-.tran 1p 20n
+.tran 10p 30n
 
 * Delay definitions: input @50%, output @50%  (VDD=1.8V TT -> 0.9V)
 * Inverter-class arc: output rises on input fall (cell_rise); output falls on input rise (cell_fall).
