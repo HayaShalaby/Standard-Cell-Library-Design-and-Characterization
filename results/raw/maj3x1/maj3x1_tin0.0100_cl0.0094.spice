@@ -1,0 +1,51 @@
+* Auto-generated characterization deck for maj3x1
+.title CHAR_maj3x1_tin0.0100ns_cl0.0094pf
+* SkyWater/ngspice compatibility (must run before .lib; mirrors libs.tech/ngspice/.spiceinit).
+.control
+set ngbehavior=hsa
+set skywaterpdk
+set ng_nomodcheck
+.endc
+
+.lib "/home/auc/work/pdks/volare/sky130/versions/dd7771c384ed36b91a25e9f8b314355fc26561be/sky130A/libs.tech/ngspice/sky130.lib.spice" tt
+.temp 25
+
+
+.include "/home/auc/Standard-Cell-Library-Design-and-Characterization/spice/stdcells.lib.spice"
+
+.param VDD=1.8
+.param TIN=0.0100n
+.param TSTART=5n
+.param TPW=10n
+.param TPER=25n
+.param CLOAD=0.0094p
+
+VDD vdd 0 DC {VDD}
+VSS vss 0 DC 0
+
+* Input pulse with 10-90 rise/fall ~= TIN
+VA a 0 PULSE(0 {VDD} {TSTART} {TIN} {TIN} {TPW} {TPER})
+
+* Non-active inputs (override as needed for multi-input cells)
+VB b 0 DC 0
+VC c 0 DC {VDD}
+
+* DUT pin mappings:
+*  - pin order defaults to (A Y VDD VSS)
+*  - for multi-input cells, script emits a matching X line.
+XDUT a b c y vdd vss maj3x1
+
+CLOAD y 0 {CLOAD}
+
+.tran 10p 30n
+
+* Delay definitions: input @50%, output @50%  (VDD=1.8V TT -> 0.9V)
+* Inverter-class arc: output rises on input fall (cell_rise); output falls on input rise (cell_fall).
+* Slew definitions: output 0.2/0.8 VDD -> 0.36V / 1.44V
+* Thresholds are numeric so Jinja does not parse { } as template syntax.
+.measure tran cell_rise  trig v(a) val=0.9 fall=1 targ v(y) val=0.9 rise=1
+.measure tran cell_fall  trig v(a) val=0.9 rise=1 targ v(y) val=0.9 fall=1
+.measure tran rise_transition trig v(y) val=0.36 rise=1 targ v(y) val=1.44 rise=1
+.measure tran fall_transition trig v(y) val=1.44 fall=1 targ v(y) val=0.36 fall=1
+
+.end
