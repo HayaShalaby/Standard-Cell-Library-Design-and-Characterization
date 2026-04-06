@@ -50,7 +50,6 @@ class RunConfig:
     load_cap_pf: List[float]
     ngspice_bin: str = "ngspice"
     dry_run: bool = False
-    smoke_test: bool = False
     jobs: int = 1
     # cwd for ngspice: directory containing sky130.lib.spice (PDK .include paths are relative).
     ngspice_cwd: Optional[Path] = None
@@ -161,14 +160,6 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Generate decks but do not execute ngspice.",
-    )
-    parser.add_argument(
-        "--smoke-test",
-        action="store_true",
-        help=(
-            "Use bundled behavioral cell stubs and skip sky130.lib.spice. "
-            "For validating automation only — not for submission timing."
-        ),
     )
     parser.add_argument(
         "--quick",
@@ -334,8 +325,6 @@ def characterize_cell(cell: str, cfg: RunConfig, template_text: str) -> Dict[str
         "tables_ns": tables,
         "failures": failures,
     }
-    if cfg.smoke_test:
-        out["mode"] = "smoke_test"
     if len(tins) != len(TIN_VECTOR_NS) or len(cloads) != len(CLOAD_VECTOR_PF):
         out["grid_note"] = "non_standard_grid"
     return out
@@ -386,61 +375,35 @@ def main() -> int:
     raw_root = root / "results" / "raw"
     out_root = root / "results" / "nldm"
 
-    smoke_fixtures = root / "spice" / "fixtures" / "smoke_stdcells.lib.spice"
-
-    if args.smoke_test:
-        stdcell_lib = str(smoke_fixtures.resolve())
-        sky130_model = ""
-        deck_preamble = (
-            "* Automation smoke test: no SKY130 .lib (behavioral stubs only)\n"
-            ".temp 25\n"
-            "\n"
+    stdcell_lib = os.environ.get("STDCELL_LIB_PATH", str(root / "spice" / "stdcells.lib.spice"))
+    sky130_model = os.environ.get("SKY130_MODEL_LIB", "")
+    if not sky130_model:
+        raise SystemExit(
+            "Set SKY130_MODEL_LIB to your sky130.lib.spice absolute path "
+            "(Open PDK / course VM; e.g. find ~ -name sky130.lib.spice)."
         )
-        stdcell_path = Path(stdcell_lib)
-        if not stdcell_path.is_file():
-            raise SystemExit(f"Smoke fixture missing: {stdcell_path}")
-    else:
-        stdcell_lib = os.environ.get("STDCELL_LIB_PATH", str(root / "spice" / "stdcells.lib.spice"))
-        sky130_model = os.environ.get("SKY130_MODEL_LIB", "")
-        if not sky130_model:
-            raise SystemExit(
-                "Set SKY130_MODEL_LIB to your sky130.lib.spice absolute path.\n"
-                "Or run with --smoke-test to validate automation without the PDK."
-            )
 
-        sky130_path = Path(sky130_model).expanduser().resolve()
-        if not sky130_path.is_file():
-            raise SystemExit(
-                "SKY130_MODEL_LIB must point to an existing file.\n"
-                f"  Got: {sky130_model}\n"
-                f"  Resolved: {sky130_path}\n"
-                "Do not use README placeholders like /absolute/path/ or /real/path/ — use the real path "
-                "from your SKY130 / Open PDK install or course VM (e.g. find sky130.lib.spice with Finder "
-                "or: find ~ -name sky130.lib.spice 2>/dev/null).\n"
-                "Or run with --smoke-test to validate automation without the PDK."
-            )
+    sky130_path = Path(sky130_model).expanduser().resolve()
+    if not sky130_path.is_file():
+        raise SystemExit(
+            "SKY130_MODEL_LIB must point to an existing file.\n"
+            f"  Got: {sky130_model}\n"
+            f"  Resolved: {sky130_path}"
+        )
 
-        stdcell_path = Path(stdcell_lib).expanduser().resolve()
-        if not stdcell_path.is_file():
-            raise SystemExit(
-                "STDCELL_LIB_PATH must point to an existing file.\n"
-                f"  Got: {stdcell_lib}\n"
-                f"  Resolved: {stdcell_path}"
-            )
+    stdcell_path = Path(stdcell_lib).expanduser().resolve()
+    if not stdcell_path.is_file():
+        raise SystemExit(
+            "STDCELL_LIB_PATH must point to an existing file.\n"
+            f"  Got: {stdcell_lib}\n"
+            f"  Resolved: {stdcell_path}"
+        )
 
-        sky130_model = str(sky130_path)
-        stdcell_lib = str(stdcell_path)
-        # Do not .include the PDK "spinit" file into the netlist: it contains `set ngbehavior=...`
-        # lines that belong in .spiceinit / control context only; as included SPICE they parse as
-        # circuit line 3 and fail with "Unable to find definition of model" on `set ngbehavior=hsa`.
-        # Only .lib ... tt — sky130.lib.spice already .include's corners/tt.spice inside the tt block.
-        # A second .include of tt.spice duplicates models and breaks parameter expansion (l=$, w=$).
-        # Only .lib ... tt — sky130.lib.spice already .include's corners/tt.spice inside the tt block.
-        # A second .include of tt.spice duplicates models and breaks parameter expansion (l=$, w=$).
-        # Do NOT .include the vendor "spinit" file — it contains interactive `set` commands that are
-        # not valid SPICE netlist syntax. Those settings are already applied via the .spiceinit that
-        # the script copies to the ngspice cwd (PDK directory) before each run.
-        deck_preamble = f'.lib "{sky130_model}" tt\n.temp 25\n\n'
+    sky130_model = str(sky130_path)
+    stdcell_lib = str(stdcell_path)
+    # Deck: only `.lib ... tt` + `.temp`. Do not .include PDK spinit (bare `set` lines break batch parse).
+    # Do not double-include tt corner — sky130.lib.spice already pulls corners/tt.spice inside the tt block.
+    deck_preamble = f'.lib "{sky130_model}" tt\n.temp 25\n\n'
 
     if not shutil.which(args.ngspice_bin):
         raise SystemExit(f"ngspice executable not found: {args.ngspice_bin}")
@@ -453,7 +416,7 @@ def main() -> int:
     ngspice_char_cwd = root / "spice" / "ngspice_char_cwd"
     spiceinit_src = ngspice_char_cwd / ".spiceinit"
     ngspice_cwd: Optional[Path] = None
-    if not args.smoke_test and sky130_model:
+    if sky130_model:
         ensure_dirs(ngspice_char_cwd)
         if not spiceinit_src.is_file():
             raise SystemExit(
@@ -491,7 +454,6 @@ def main() -> int:
         load_cap_pf=cload_vec,
         ngspice_bin=args.ngspice_bin,
         dry_run=args.dry_run,
-        smoke_test=args.smoke_test,
         jobs=args.jobs,
         ngspice_cwd=ngspice_cwd,
     )
@@ -499,7 +461,7 @@ def main() -> int:
     ensure_dirs(cfg.raw_root, cfg.out_root, root / "results" / "plots")
     template_text = load_template(cfg.template_path)
 
-    if not args.smoke_test and not args.dry_run:
+    if not args.dry_run:
         print(
             "SKY130: first ngspice run can take several minutes while models compile; "
             "little terminal output is normal. Watch: ls -la results/raw/<cell>/\n"
@@ -527,8 +489,6 @@ def main() -> int:
 
     if args.dry_run:
         print("Dry run completed. Decks generated without ngspice execution.")
-    elif args.smoke_test:
-        print("Smoke test used behavioral fixtures — replace with SKY130 + real cells for submission.")
     if args.quick and not args.dry_run:
         print("Quick 2×2 grid — re-run without --quick for full 7×7 NLDM tables.")
 

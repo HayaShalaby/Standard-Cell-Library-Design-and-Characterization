@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="480" viewBox="0 0 750 480">
+<rect width="100%" height="100%" fill="#fafafa"/>
+<text x="375" y="36" text-anchor="middle" font-size="16" font-family="sans-serif">Inverter delay vs load (tin ≈ 0.1225 ns)</text>
+<line x1="72.00" y1="48.00" x2="72.00" y2="424.00" stroke="#ddd" stroke-width="1"/>
+<line x1="72.00" y1="424.00" x2="710.00" y2="424.00" stroke="#ddd" stroke-width="1"/>
+<line x1="199.60" y1="48.00" x2="199.60" y2="424.00" stroke="#ddd" stroke-width="1"/>
+<line x1="72.00" y1="348.80" x2="710.00" y2="348.80" stroke="#ddd" stroke-width="1"/>
+<line x1="327.20" y1="48.00" x2="327.20" y2="424.00" stroke="#ddd" stroke-width="1"/>
+<line x1="72.00" y1="273.60" x2="710.00" y2="273.60" stroke="#ddd" stroke-width="1"/>
+<line x1="454.80" y1="48.00" x2="454.80" y2="424.00" stroke="#ddd" stroke-width="1"/>
+<line x1="72.00" y1="198.40" x2="710.00" y2="198.40" stroke="#ddd" stroke-width="1"/>
+<line x1="582.40" y1="48.00" x2="582.40" y2="424.00" stroke="#ddd" stroke-width="1"/>
+<line x1="72.00" y1="123.20" x2="710.00" y2="123.20" stroke="#ddd" stroke-width="1"/>
+<line x1="710.00" y1="48.00" x2="710.00" y2="424.00" stroke="#ddd" stroke-width="1"/>
+<line x1="72.00" y1="48.00" x2="710.00" y2="48.00" stroke="#ddd" stroke-width="1"/>
+<line x1="72" y1="424" x2="710" y2="424" stroke="#333" stroke-width="1.5"/>
+<line x1="72" y1="48" x2="72" y2="424" stroke="#333" stroke-width="1.5"/>
+<text x="391" y="468" text-anchor="middle" font-size="12" font-family="sans-serif">Load capacitance (pF)</text>
+<text x="18" y="236" text-anchor="middle" font-size="12" font-family="sans-serif" transform="rotate(-90 18 236)">Delay (ns)</text>
+<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="101.00,395.00 103.65,391.60 110.93,385.37 130.45,374.13 181.73,345.98 318.38,271.31 681.00,73.93"/>
+<circle cx="101.00" cy="395.00" r="4" fill="#1f77b4"/>
+<circle cx="103.65" cy="391.60" r="4" fill="#1f77b4"/>
+<circle cx="110.93" cy="385.37" r="4" fill="#1f77b4"/>
+<circle cx="130.45" cy="374.13" r="4" fill="#1f77b4"/>
+<circle cx="181.73" cy="345.98" r="4" fill="#1f77b4"/>
+<circle cx="318.38" cy="271.31" r="4" fill="#1f77b4"/>
+<circle cx="681.00" cy="73.93" r="4" fill="#1f77b4"/>
+<polyline fill="none" stroke="#ff7f0e" stroke-width="2" points="101.00,396.24 103.65,394.15 110.93,390.03 130.45,382.87 181.73,368.96 318.38,332.36 681.00,235.52"/>
+<circle cx="101.00" cy="396.24" r="4" fill="#ff7f0e"/>
+<circle cx="103.65" cy="394.15" r="4" fill="#ff7f0e"/>
+<circle cx="110.93" cy="390.03" r="4" fill="#ff7f0e"/>
+<circle cx="130.45" cy="382.87" r="4" fill="#ff7f0e"/>
+<circle cx="181.73" cy="368.96" r="4" fill="#ff7f0e"/>
+<circle cx="318.38" cy="332.36" r="4" fill="#ff7f0e"/>
+<circle cx="681.00" cy="235.52" r="4" fill="#ff7f0e"/>
+<polyline fill="none" stroke="#2ca02c" stroke-width="2" points="101.00,397.37 103.65,396.17 110.93,393.58 130.45,388.76 181.73,380.68 318.38,363.02 681.00,316.36"/>
+<circle cx="101.00" cy="397.37" r="4" fill="#2ca02c"/>
+<circle cx="103.65" cy="396.17" r="4" fill="#2ca02c"/>
+<circle cx="110.93" cy="393.58" r="4" fill="#2ca02c"/>
+<circle cx="130.45" cy="388.76" r="4" fill="#2ca02c"/>
+<circle cx="181.73" cy="380.68" r="4" fill="#2ca02c"/>
+<circle cx="318.38" cy="363.02" r="4" fill="#2ca02c"/>
+<circle cx="681.00" cy="316.36" r="4" fill="#2ca02c"/>
+<polyline fill="none" stroke="#d62728" stroke-width="2" points="101.00,398.07 103.65,397.42 110.93,395.88 130.45,392.75 181.73,387.18 318.38,377.55 681.00,354.44"/>
+<circle cx="101.00" cy="398.07" r="4" fill="#d62728"/>
+<circle cx="103.65" cy="397.42" r="4" fill="#d62728"/>
+<circle cx="110.93" cy="395.88" r="4" fill="#d62728"/>
+<circle cx="130.45" cy="392.75" r="4" fill="#d62728"/>
+<circle cx="181.73" cy="387.18" r="4" fill="#d62728"/>
+<circle cx="318.38" cy="377.55" r="4" fill="#d62728"/>
+<circle cx="681.00" cy="354.44" r="4" fill="#d62728"/>
+<rect x="562" y="56" width="12" height="12" fill="#1f77b4"/>
+<text x="578" y="66" font-size="11" font-family="sans-serif">invx1 (tin=0.1225 ns)</text>
+<rect x="562" y="74" width="12" height="12" fill="#ff7f0e"/>
+<text x="578" y="84" font-size="11" font-family="sans-serif">invx2 (tin=0.1225 ns)</text>
+<rect x="562" y="92" width="12" height="12" fill="#2ca02c"/>
+<text x="578" y="102" font-size="11" font-family="sans-serif">invx4 (tin=0.1225 ns)</text>
+<rect x="562" y="110" width="12" height="12" fill="#d62728"/>
+<text x="578" y="120" font-size="11" font-family="sans-serif">invx8 (tin=0.1225 ns)</text>
+</svg>

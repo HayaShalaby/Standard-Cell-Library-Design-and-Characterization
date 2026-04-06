@@ -1,81 +1,79 @@
 # Standard-Cell-Library-Design-and-Characterization
 
-SKY130 standard cell library design and **ngspice** batch characterization (course project).
+SKY130 standard cell library design and **ngspice** batch characterization (Digital Design II–style course project).
 
-This repository contains the cell library netlists and an automation scaffold for NLDM characterization.
+The repo holds **13 transistor-level subcircuits**, a **parametrized testbench**, a **Python sweep driver**, **NLDM JSON** (and an optional **Excel** workbook), and **report figures** (inverter delay vs load, RC vs SPICE at the table midpoint).
 
-## What this gives you
+## Contents
 
-- A batch characterization flow based on `ngspice` + Python.
-- 7x7 sweeps for input transition and output load.
-- Parsing for required timing metrics:
-  - `cell_rise`
-  - `cell_fall`
-  - `rise_transition`
-  - `fall_transition`
-- JSON output per cell ready for reporting.
+- **7×7** sweeps over input transition (ns) and output load (pF).
+- Extracted metrics (ns in JSON): `cell_rise`, `cell_fall`, `rise_transition`, `fall_transition`.
+- One JSON file per cell under `results/nldm/`.
 
-## Project layout
+## Repository layout
 
-- `spice/stdcells.lib.spice` - your 13 `.subckt` definitions live here.
-- `spice/templates/char_testbench.spice.j2` - parametrized ngspice deck template.
-- `spice/ngspice_char_cwd/.spiceinit` - SkyWater/ngspice compatibility (`ngbehavior`, `skywaterpdk`, `ng_nomodcheck`). The driver runs `ngspice` with this folder as the process working directory so batch mode picks it up.
-- `scripts/run_characterization.py` - main sweep driver.
-- `results/raw/` - ngspice netlists and logs.
-- `results/nldm/` - NLDM JSON tables per cell.
-- `results/plots/` - plotting output location.
+| Path | Purpose |
+|------|---------|
+| `spice/stdcells.lib.spice` | All `.subckt` definitions (13 cells). |
+| `spice/templates/char_testbench.spice.j2` | Jinja2 ngspice deck template. |
+| `spice/ngspice_char_cwd/.spiceinit` | SkyWater/ngspice compatibility (`ngbehavior`, etc.). The driver runs `ngspice` with the PDK directory as cwd and copies this file there when needed. |
+| `scripts/run_characterization.py` | Main characterization driver. |
+| `scripts/plot_inverter_delay.py` | Inverter family **delay vs load** (SVG without extra deps; PNG if `matplotlib` is installed). |
+| `scripts/plot_rc_vs_spice_midpoint.py` | **RC vs SPICE** grouped bars at NLDM midpoint (default: invx1, tin ≈ 0.1225 ns, C_load ≈ 0.0094 pF). |
+| `scripts/generate_nldm_excel.py` | Builds `results/nldm/nldm_tables.xlsx` from all `results/nldm/*.json` (requires `openpyxl`). |
+| `results/nldm/*.json` | NLDM tables per cell. |
+| `results/nldm/nldm_tables.xlsx` | Excel report (optional; regenerate with script above). |
+| `results/plots/` | Default output for figure scripts (git may or may not track—regenerate anytime). |
+| `results/raw/` | Per-run netlists and logs (**gitignored**). Safe to delete; recreated on the next characterization run. |
 
 ## Requirements
 
-- Python 3.9+
-- `ngspice` available in `PATH`
-- Optional for template rendering:
-  - `jinja2` (recommended)
+- **Python 3.9+** (3.10+ recommended).
+- **`ngspice`** on `PATH` for real PDK runs.
+- **Python packages** (see `requirements.txt`):
+  - `jinja2` — template rendering (built-in fallback exists but Jinja2 is recommended).
+  - `openpyxl` — Excel generation.
+  - `matplotlib` — optional; only needed for **PNG** plots. **SVG** figures use the standard library only.
 
-If `jinja2` is not installed, the script can still run using a built-in fallback renderer.
-
-## Quick start
-
-1. Put your SKY130 model and library path in environment variables. Use the **real** path to `sky130.lib.spice` on your machine (from Open PDK, course files, or your VM)—not a placeholder string:
+Install:
 
 ```bash
-# Example only: replace with your actual path, e.g. from `find ~ -name sky130.lib.spice`
-export SKY130_MODEL_LIB="/Users/you/path/to/sky130.lib.spice"
+pip install -r requirements.txt
+```
+
+## Environment (real SKY130 run)
+
+Point to your actual `sky130.lib.spice` and the compiled standard cell library:
+
+```bash
+export SKY130_MODEL_LIB="/path/to/sky130.lib.spice"
 export STDCELL_LIB_PATH="$(pwd)/spice/stdcells.lib.spice"
 ```
 
-The script checks that both files exist before running simulations.
+Both files must exist before simulations start.
 
-### Test automation only (no PDK / no custom cells yet)
-
-Use `--smoke-test` to run the full sweep against bundled **behavioral** stubs in
-[`spice/fixtures/smoke_stdcells.lib.spice`](spice/fixtures/smoke_stdcells.lib.spice). You do **not** need
-`SKY130_MODEL_LIB` or a filled `stdcells.lib.spice`.
+## Quick start: characterization
 
 ```bash
-python3 scripts/run_characterization.py --smoke-test --cells invx1
+python3 scripts/run_characterization.py --dry-run --cells invx1   # write decks only (still needs real SKY130_MODEL_LIB)
+python3 scripts/run_characterization.py                              # full 13 cells × 49 points
 ```
 
-Output JSON includes `"mode": "smoke_test"`. Timing numbers are **not** valid for the course report—this
-only validates decks, ngspice, parsing, and JSON output.
+`--quick` uses a 2×2 grid (faster sanity check; **not** the full 7×7 NLDM for submission). See `--help` for `--cells` and `--jobs`.
 
-1. Fill `spice/stdcells.lib.spice` with your final 13 cell subcircuits.
-2. Dry run first:
+## Quick start: figures and Excel
 
-```bash
-python3 scripts/run_characterization.py --dry-run --cells invx1
-```
-
-1. Real run (example):
+From the repository root, after `results/nldm/*.json` exist:
 
 ```bash
-python3 scripts/run_characterization.py --cells invx1 invx2 invx4 invx8
-```
+# Inverter delay vs load (SVG — no matplotlib)
+python3 scripts/plot_inverter_delay.py -d results/nldm -o results/plots/inverter_delay.svg --format svg
 
-1. Full library run:
+# RC model vs SPICE at NLDM midpoint (prints a ps table on stdout)
+python3 scripts/plot_rc_vs_spice_midpoint.py -d results/nldm -o results/plots/rc_vs_spice_midpoint.svg --format svg
 
-```bash
-python3 scripts/run_characterization.py
+# Excel workbook for the report appendix
+python3 scripts/generate_nldm_excel.py
 ```
 
 ## Troubleshooting simulations
@@ -89,32 +87,35 @@ Use **only**:
 .temp 25
 ```
 
-The file `sky130.lib.spice` already pulls in `corners/tt.spice` inside the `tt` section. Adding a second
-`.include .../corners/tt.spice` in the same deck reloads all MOSFET subcircuits and can produce bogus
-instances (`l=$`, `w=$`) or “redefinition ignored” warnings.
+`sky130.lib.spice` already includes the `tt` corner. A second `.include` of `tt.spice` can cause redefinition / bogus instances.
 
 ### `could not find a valid modelname` (e.g. `sky130_fd_pr__pfet_01v8__model`)
 
-- Ensure `spice/ngspice_char_cwd/.spiceinit` is present (it is committed in this repo).
-- Some **Homebrew** builds of **ngspice 45** on **Apple Silicon** still fail on SkyWater’s binned `.model ...__model.N` cards even with `.spiceinit`. If you see this after the fixes above, run the same flow on the **course Linux VM**, a conda/pip environment that ships a known-good ngspice, or an older ngspice build your instructor recommends.
-- By default the driver sets ngspice **cwd** to the PDK folder that contains `sky130.lib.spice` and copies `spice/ngspice_char_cwd/.spiceinit` there so relative includes and model cards resolve. To force the old **repo-only** cwd (usually wrong for volare):
+- Keep `spice/ngspice_char_cwd/.spiceinit` in the repo; ensure the driver’s **cwd strategy** matches your PDK layout.
+- Some **macOS** ngspice builds still fail on SkyWater model cards. Prefer the **course Linux VM**, **conda-forge linux-64**, or an ngspice version your instructor recommends.
+- To force cwd to stay in the repo (usually wrong for volare installs):
 
 ```bash
 export NGSPICE_CWD_REPO=1
 ```
 
-## Notes on pin order and arcs
+## Multi-input cells
 
-This automation assumes each cell has pins `(A Y VDD VSS)` by default.
+NAND2, NOR2, and MAJ3 use the DUT instance line and **B/C bias** defined in `scripts/run_characterization.py` (`build_xdut_line`, `input_bias_for_cell`) so input **A** is the switching pin. These must match your `.subckt` port order in `spice/stdcells.lib.spice`.
 
-For multi-input cells (NAND2/NOR2/MAJ3), set `pin_order` and `active_input` mappings in
-`scripts/run_characterization.py` to match final `.subckt` definitions.
+## JSON output shape
 
-## Output format
+Each `results/nldm/<cell>.json` contains:
 
-Each file in `results/nldm/<cell>.json` contains:
+- `input_transition_ns`, `load_cap_pf`
+- `tables_ns`: four **7×7** matrices (values in **ns**)
+- Optional `failures` / metadata for debugging failed points
 
-- `input_transition_ns` vector
-- `load_cap_pf` vector
-- 4 matrices (`7x7`) for NLDM values in ns
-- run metadata
+## Cleaning generated artifacts
+
+- **`results/raw/`** — netlists and logs; **gitignored**. Delete anytime; rerun characterization to refill.
+- **`results/plots/`** — regenerate with the plot scripts. Exported **PNG** scratch files (e.g. `*-01.png`) are ignored by git—prefer **SVG** for the report or attach figures only in the PDF.
+
+## Authors
+
+Course project by **Mohamed El-Refai** and **Haya Shalaby** (American University in Cairo). See the submitted report for division of labor, AI-tool disclosure, and methodology details.
