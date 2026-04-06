@@ -6,3 +6,6 @@ venv/
 
 results/raw/
 *.log
+
+# Plot editor exports / duplicates (regenerate from scripts)
+results/plots/*.png
