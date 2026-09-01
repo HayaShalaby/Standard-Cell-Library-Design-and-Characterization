@@ -1,6 +1,6 @@
 # Standard-Cell-Library-Design-and-Characterization
 
-SKY130 standard cell library design and **ngspice** batch characterization (Digital Design II–style course project).
+SKY130 standard cell library design and **ngspice** batch characterization (Digital Design II course project 1).
 
 The repo holds **13 transistor-level subcircuits**, a **parametrized testbench**, a **Python sweep driver**, **NLDM JSON** (and an optional **Excel** workbook), and **report figures** (inverter delay vs load, RC vs SPICE at the table midpoint).
 
